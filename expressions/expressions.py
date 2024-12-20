@@ -1,19 +1,17 @@
-from abc import ABC, abstractmethod  # noqa D100
-import numbers
+import numbers  # noqa D100
+from functools import singledispatch
 
 
-class Expression(ABC):
-    """Abstract base class for all expressions."""
+class Expression():
+    """Expressions class."""
 
     def __init__(self, *operands):
         self.operands = operands
 
     def __add__(self, other):
-        if isinstance(other, Expression):
-            return Add(self, other)
-        elif isinstance(other, numbers.Number):
-            return Add(self, Number(other))
-        return NotImplemented
+        if isinstance(other, numbers.Number):
+            other = Number(other)
+        return Add(self, other)
 
     def __radd__(self, other):
         if isinstance(other, numbers.Number):
@@ -21,11 +19,9 @@ class Expression(ABC):
         return NotImplemented
 
     def __sub__(self, other):
-        if isinstance(other, Expression):
-            return Sub(self, other)
-        elif isinstance(other, numbers.Number):
-            return Sub(self, Number(other))
-        return NotImplemented
+        if isinstance(other, numbers.Number):
+            other = Number(other)
+        return Sub(self, other)
 
     def __rsub__(self, other):
         if isinstance(other, numbers.Number):
@@ -33,11 +29,9 @@ class Expression(ABC):
         return NotImplemented
 
     def __mul__(self, other):
-        if isinstance(other, Expression):
-            return Mul(self, other)
-        elif isinstance(other, numbers.Number):
-            return Mul(self, Number(other))
-        return NotImplemented
+        if isinstance(other, numbers.Number):
+            other = Number(other)
+        return Mul(self, other)
 
     def __rmul__(self, other):
         if isinstance(other, numbers.Number):
@@ -45,11 +39,9 @@ class Expression(ABC):
         return NotImplemented
 
     def __truediv__(self, other):
-        if isinstance(other, Expression):
-            return Div(self, other)
-        elif isinstance(other, numbers.Number):
-            return Div(self, Number(other))
-        return NotImplemented
+        if isinstance(other, numbers.Number):
+            other = Number(other)
+        return Div(self, other)
 
     def __rtruediv__(self, other):
         if isinstance(other, numbers.Number):
@@ -57,62 +49,91 @@ class Expression(ABC):
         return NotImplemented
 
     def __pow__(self, other):
-        if isinstance(other, Expression):
-            return Pow(self, other)
-        elif isinstance(other, numbers.Number):
-            return Pow(self, Number(other))
-        return NotImplemented
+        if isinstance(other, numbers.Number):
+            other = Number(other)
+        return Pow(self, other)
 
     def __rpow__(self, other):
         if isinstance(other, numbers.Number):
             return Pow(Number(other), self)
         return NotImplemented
 
-    @abstractmethod
+
+class Operator(Expression):
+    """Base class for operators."""
+
     def __repr__(self):
-        pass
+        return self.__class__.__name__ + repr(self.operands)
 
-    @abstractmethod
     def __str__(self):
-        pass
+        def paren(expr):
+            if expr.precedence < self.precedence:
+                return f"({expr!s})"
+            else:
+                return str(expr)
+        return " ".join((paren(self.operands[0]),
+                         self.symbol,
+                         paren(self.operands[1])))
 
-    @abstractmethod
-    def evaluate(self, **kwargs):
-        """Evaluate."""
-        pass
+
+class Add(Operator):
+    """Represents addition."""
+
+    precedence = 0
+    symbol = "+"
+
+
+class Sub(Operator):
+    """Represents subtraction."""
+
+    precedence = 0
+    symbol = "-"
+
+
+class Mul(Operator):
+    """Represents multiplication."""
+
+    precedence = 1
+    symbol = "*"
+
+
+class Div(Operator):
+    """Represents division."""
+
+    precedence = 1
+    symbol = "/"
+
+
+class Pow(Operator):
+    """Represents exponents."""
+
+    precedence = 2
+    symbol = "^"
 
 
 class Terminal(Expression):
     """Represents terminal expressions like numbers and symbols."""
 
+    precedence = 3
+
     def __init__(self, value):
-        super().__init__()
         self.value = value
+        super().__init__()
 
     def __repr__(self):
-        return f"{type(self).__name__}({repr(self.value)})"
+        return repr(self.value)
 
     def __str__(self):
         return str(self.value)
-
-    def evaluate(self, **kwargs):
-        """Evaluate."""
-        return self.value
 
 
 class Symbol(Terminal):
     """Represents a symbolic variable."""
 
-    def __init__(self, name):
-        if not isinstance(name, str):
-            raise TypeError("Symbol name must be a string.")
-        super().__init__(name)
-
-    def evaluate(self, **kwargs):
-        """Evaluate."""
-        if self.value in kwargs:
-            return kwargs[self.value]
-        raise ValueError(f"Value for symbol '{self.value}' not provided.")
+    def __init__(self, value):
+        if not isinstance(value, str):
+            raise TypeError("Symbol value must be a string.")
+        super().__init__(value)
 
 
 class Number(Terminal):
@@ -120,97 +141,8 @@ class Number(Terminal):
 
     def __init__(self, value):
         if not isinstance(value, numbers.Number):
-            raise TypeError("Number value must be a numeric type.")
+            raise TypeError("Number value must be a number.")
         super().__init__(value)
-
-
-class Operator(Expression):
-    """Abstract base class for operators."""
-
-    symbol = ''
-    precedence = 0
-
-    def __init__(self, *operands):
-        if len(operands) != 2:
-            raise ValueError
-        super().__init__(*operands)
-
-    def __repr__(self):
-        return (
-            f"{type(self).__name__}("
-            f"{repr(self.operands[0])}, {repr(self.operands[1])})"
-        )
-
-    def __str__(self):
-        left, right = self.operands
-        # Left operand parentheses
-        left_str = (
-            f"({left})"
-            if isinstance(left, Operator) and left.precedence < self.precedence
-            else str(left)
-        )
-        # Right operand parentheses
-        right_str = (
-            f"({right})"
-            if isinstance(right, Operator) and right.precedence < self.precedence or (isinstance(right, Operator) and right.precedence == self.precedence and self.symbol not in ["+", "*"])  # noqa E501
-            else str(right)
-        )
-        return f"{left_str} {self.symbol} {right_str}"
-
-
-class Add(Operator):
-    """Represents addition."""
-
-    symbol = '+'
-    precedence = 1
-
-    def evaluate(self, **kwargs):
-        """Evaluate."""
-        return self.operands[0].evaluate(**kwargs) + self.operands[1].evaluate(**kwargs)  # noqa E501
-
-
-class Sub(Operator):
-    """Represents subtraction."""
-
-    symbol = '-'
-    precedence = 1
-
-    def evaluate(self, **kwargs):
-        """Evaluate."""
-        return self.operands[0].evaluate(**kwargs) - self.operands[1].evaluate(**kwargs)  # noqa E501
-
-
-class Mul(Operator):
-    """Represents multiplication."""
-
-    symbol = '*'
-    precedence = 2
-
-    def evaluate(self, **kwargs):
-        """Evaluate."""
-        return self.operands[0].evaluate(**kwargs) * self.operands[1].evaluate(**kwargs)  # noqa E501
-
-
-class Div(Operator):
-    """Represents division."""
-
-    symbol = '/'
-    precedence = 2
-
-    def evaluate(self, **kwargs):
-        """Evaluate."""
-        return self.operands[0].evaluate(**kwargs) / self.operands[1].evaluate(**kwargs)  # noqa E501
-
-
-class Pow(Operator):
-    """Represents exponentiation."""
-
-    symbol = '^'
-    precedence = 3
-
-    def evaluate(self, **kwargs):
-        """Evaluate."""
-        return self.operands[0].evaluate(**kwargs) ** self.operands[1].evaluate(**kwargs)  # noqa E501
 
 
 def postvisitor(expr, fn, **kwargs):
@@ -230,54 +162,64 @@ def postvisitor(expr, fn, **kwargs):
     **kwargs:
         Any additional keyword arguments to be passed to fn.
     """
+    stack = []
     visited = {}
-    stack = [(expr, False)]
-    results = {}
-
+    stack.append(expr)
     while stack:
-        node, processed = stack.pop()
-        if processed:
-            results[node] = fn(node, *(results[c] for c in node.operands), **kwargs)  # noqa E501
-        elif node not in visited:
-            visited[node] = True
-            stack.append((node, True))
-            for operand in node.operands:
-                if operand not in visited:
-                    stack.append((operand, False))
+        e = stack.pop()
+        unvisited_children = []
+        for o in e.operands:
+            if o not in visited:
+                unvisited_children.append(o)
 
-    return results[expr]
-
-
-def differentiate(expr, *operands, var=None, **kwargs):
-    """
-    Differentiate an Expression with respect to a given variable.
-
-    Parameters
-    ----------
-    expr: Expression
-        The expression to be differentiated.
-    var: str
-        The variable with respect to which differentiation is performed.
-    """
-    if isinstance(expr, Number):
-        return Number(0)
-    elif isinstance(expr, Symbol):
-        return Number(1) if expr.value == var else Number(0)
-    elif isinstance(expr, Add):
-        return Add(*operands)
-    elif isinstance(expr, Sub):
-        return Sub(*operands)
-    elif isinstance(expr, Mul):
-        u, v = expr.operands
-        return Add(Mul(differentiate(u, var=var), v), Mul(u, differentiate(v, var=var))) # noqa E501
-    elif isinstance(expr, Div):
-        u, v = expr.operands
-        return Div(Sub(Mul(differentiate(u, var=var), v), Mul(u, differentiate(v, var=var))), Pow(v, Number(2)))  # noqa E501
-    elif isinstance(expr, Pow):
-        base, exponent = expr.operands
-        if isinstance(exponent, Number):
-            return Mul(Mul(Number(exponent.value), Pow(base, Number(exponent.value - 1))), differentiate(base, var=var))  # noqa E501
+        if unvisited_children:
+            stack.append(e)
+            for uc in unvisited_children:
+                stack.append(uc)
         else:
-            raise NotImplementedError("Non-constant exponent.")
-    else:
-        raise TypeError(f"Unsupported expression type: {type(expr)}")
+            visited[e] = fn(e, *(visited[o] for o in e.operands), **kwargs)
+
+    return visited[expr]
+
+
+@singledispatch
+def differentiate(expr, *o, **kwargs):  # noqa D103
+    raise NotImplementedError(
+        f"Cannot differentiate a {type(expr).__name__}")
+
+
+@differentiate.register(Number)
+def _(expr, *o, **kwargs):
+    return 0.0
+
+
+@differentiate.register(Symbol)
+def _(expr, *o, **kwargs):
+    return 1.0 if kwargs['var'] == expr.value else 0.0
+
+
+@differentiate.register(Add)
+def _(expr, *o, **kwargs):
+    return o[0] + o[1]
+
+
+@differentiate.register(Sub)
+def _(expr, *o, **kwargs):
+    return o[0] - o[1]
+
+
+@differentiate.register(Mul)
+def _(expr, *o, **kwargs):
+    return o[0] * expr.operands[1] + o[1] * expr.operands[0]
+
+
+@differentiate.register(Div)
+def _(expr, *o, **kwargs):
+    return (o[0] * expr.operands[1] - expr.operands[0]
+            * o[1]) / (expr.operands[1]**2)
+
+
+@differentiate.register(Pow)
+def _(expr, *o, **kwargs):
+    return expr.operands[1] * \
+        (expr.operands[0] ** (expr.operands[1] - 1)) * o[0]
